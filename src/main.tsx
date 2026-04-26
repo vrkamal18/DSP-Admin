@@ -10,6 +10,7 @@ import { PlatformAdminDashboard } from "./pages/PlatformAdminDashboard";
 import { PlatformAdminUsers } from "./pages/PlatformAdminUsers";
 import { PlatformAdminTenants } from "./pages/PlatformAdminTenants";
 import { PlatformAdminSettings } from "./pages/PlatformAdminSettings";
+import { PlatformAdminHealth } from "./pages/PlatformAdminHealth";
 import "./index.css";
 
 Amplify.configure({
@@ -33,6 +34,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="users" element={<PlatformAdminUsers />} />
             <Route path="tenants" element={<PlatformAdminTenants />} />
             <Route path="settings" element={<PlatformAdminSettings />} />
+            <Route path="health" element={<PlatformAdminHealth />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RefreshCw, Search, Pencil, Trash2, AlertTriangle, Plus, X, Check, PauseCircle, PlayCircle } from "lucide-react";
+import { RefreshCw, Search, Pencil, Trash2, AlertTriangle, Plus, X, PauseCircle, PlayCircle, Building2, CheckCircle2, PauseOctagon, Layers, Users } from "lucide-react";
 import { Input } from "../components/ui/input";
 
 const AUTH_API = import.meta.env.VITE_AUTH_API_URL ?? "http://localhost:8088";
@@ -40,7 +40,88 @@ const statusColors: Record<string, string> = {
   CANCELLED: "bg-red-100 text-red-700",
 };
 
+interface TenantUser {
+  id: number;
+  email: string;
+  username: string;
+  firstName?: string;
+  lastName?: string;
+  roles: string[];
+  status?: string;
+}
+
 function getToken() { return localStorage.getItem("dsp_admin_token") ?? ""; }
+
+function TenantUsersModal({ tenant, onClose }: { tenant: Tenant; onClose: () => void }) {
+  const [users, setUsers]     = useState<TenantUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState("");
+
+  useEffect(() => {
+    fetch(`${AUTH_API}/api/tenants/${tenant.id}/users`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(setUsers)
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [tenant.id]);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white border border-neutral-200 rounded-xl shadow-2xl w-full max-w-lg mx-4">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-100">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-indigo-500" />
+            <div>
+              <h2 className="text-base font-semibold text-neutral-900">Users — {tenant.name}</h2>
+              <p className="text-xs text-neutral-400">{tenant.plan} · {tenant.status}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-4 max-h-96 overflow-y-auto">
+          {loading && <p className="text-sm text-neutral-400 text-center py-6">Loading users...</p>}
+          {error   && <p className="text-sm text-red-500 text-center py-6">{error}</p>}
+          {!loading && !error && users.length === 0 && (
+            <p className="text-sm text-neutral-400 text-center py-6">No users under this tenant</p>
+          )}
+          {!loading && users.map(u => {
+            const fullName = [u.firstName, u.lastName].filter(Boolean).join(" ");
+            return (
+              <div key={u.id} className="flex items-center gap-3 py-2.5 border-b border-neutral-100 last:border-0">
+                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-semibold text-indigo-700 flex-shrink-0">
+                  {(u.email ?? u.username ?? "?")[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-neutral-800 truncate">{u.email}</p>
+                  {fullName && <p className="text-xs text-neutral-400">{fullName}</p>}
+                </div>
+                <div className="flex gap-1.5 flex-shrink-0">
+                  {(u.roles ?? []).map(r => (
+                    <span key={r} className="text-xs bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full">
+                      {r.replace("ROLE_", "")}
+                    </span>
+                  ))}
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
+                  u.status?.toUpperCase() === "VERIFIED" || u.status?.toUpperCase() === "ACTIVE"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : u.status?.toUpperCase() === "SUSPENDED"
+                    ? "bg-red-100 text-red-600"
+                    : "bg-amber-100 text-amber-700"
+                }`}>{u.status ?? "—"}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="px-6 py-3 border-t border-neutral-100 text-xs text-neutral-400 text-right">
+          {users.length} user{users.length !== 1 ? "s" : ""}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function TenantModal({ tenant, onClose, onSaved }: {
   tenant: Tenant | null;
@@ -147,6 +228,7 @@ export function PlatformAdminTenants() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting]               = useState(false);
   const [togglingId, setTogglingId]           = useState<number | null>(null);
+  const [viewUsersTenant, setViewUsersTenant] = useState<Tenant | null>(null);
 
   async function fetchTenants() {
     setLoading(true); setError(null);
@@ -189,6 +271,10 @@ export function PlatformAdminTenants() {
     finally { setDeleting(false); }
   }
 
+  const activeCount     = tenants.filter(t => t.status?.toUpperCase() === "ACTIVE").length;
+  const suspendedCount  = tenants.filter(t => t.status?.toUpperCase() === "SUSPENDED").length;
+  const enterpriseCount = tenants.filter(t => t.plan?.toUpperCase() === "ENTERPRISE").length;
+
   const filtered = tenants.filter(t => t.name?.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -207,6 +293,26 @@ export function PlatformAdminTenants() {
             <Plus className="w-4 h-4" /> New Tenant
           </button>
         </div>
+      </div>
+
+      {/* Stats bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        {[
+          { label: "Total",      value: tenants.length,  icon: Building2,    color: "text-indigo-600 bg-indigo-50" },
+          { label: "Active",     value: activeCount,     icon: CheckCircle2, color: "text-emerald-600 bg-emerald-50" },
+          { label: "Suspended",  value: suspendedCount,  icon: PauseOctagon, color: "text-amber-600 bg-amber-50" },
+          { label: "Enterprise", value: enterpriseCount, icon: Layers,       color: "text-violet-600 bg-violet-50" },
+        ].map(s => (
+          <div key={s.label} className="bg-white border border-neutral-200 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${s.color}`}>
+              <s.icon className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-neutral-900 leading-none">{s.value}</p>
+              <p className="text-xs text-neutral-500 mt-0.5">{s.label}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Search */}
@@ -276,6 +382,9 @@ export function PlatformAdminTenants() {
                       </div>
                     ) : (
                       <div className="flex items-center gap-3">
+                        <button onClick={() => setViewUsersTenant(t)} className="text-neutral-400 hover:text-indigo-500 transition-colors" title="View users">
+                          <Users className="w-4 h-4" />
+                        </button>
                         <button onClick={() => setModalTenant(t)} className="text-neutral-400 hover:text-indigo-500 transition-colors" title="Edit">
                           <Pencil className="w-4 h-4" />
                         </button>
@@ -294,6 +403,11 @@ export function PlatformAdminTenants() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* View Users Modal */}
+      {viewUsersTenant && (
+        <TenantUsersModal tenant={viewUsersTenant} onClose={() => setViewUsersTenant(null)} />
       )}
 
       {/* Create / Edit Modal */}

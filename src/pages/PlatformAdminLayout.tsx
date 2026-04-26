@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Shield, Users, Building2, Settings, LayoutDashboard, LogOut, CreditCard, Database } from "lucide-react";
+import { Shield, Users, Building2, Settings, LayoutDashboard, LogOut, Activity } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { useEffect, useState } from "react";
 
@@ -26,16 +26,15 @@ export function PlatformAdminLayout() {
       const { signOut } = await import("@aws-amplify/auth");
       await signOut();
     } catch (_) {}
-    navigate("/platform-admin/login");
+    navigate("/login");
   }
 
   const navItems = [
-    { to: "/platform-admin",          icon: LayoutDashboard, label: "Dashboard", end: true },
-    { to: "/platform-admin/users",    icon: Users,           label: "Users" },
-    { to: "/platform-admin/tenants",  icon: Building2,       label: "Tenants" },
-    { to: "/platform-admin/fees",     icon: CreditCard,      label: "Fees" },
-    { to: "/platform-admin/dmp-connectors", icon: Database,  label: "Connectors" },
-    { to: "/platform-admin/settings", icon: Settings,        label: "Settings" },
+    { to: "/",          icon: LayoutDashboard, label: "Dashboard", end: true },
+    { to: "/users",     icon: Users,           label: "Users" },
+    { to: "/tenants",   icon: Building2,       label: "Tenants" },
+    { to: "/health",    icon: Activity,        label: "System Health" },
+    { to: "/settings",  icon: Settings,        label: "Settings" },
   ];
 
   return (

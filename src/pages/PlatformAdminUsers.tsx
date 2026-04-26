@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RefreshCw, Search, Pencil, Check, X, Trash2, AlertTriangle, KeyRound, Plus, UserPlus, ShieldCheck } from "lucide-react";
+import { RefreshCw, Search, Pencil, Check, X, Trash2, AlertTriangle, KeyRound, Plus, UserPlus, ShieldOff, ShieldCheck, Users, UserCheck, UserX, Clock } from "lucide-react";
 import { Input } from "../components/ui/input";
 
 const AUTH_API = import.meta.env.VITE_AUTH_API_URL ?? "http://localhost:8088";
@@ -10,10 +10,22 @@ interface UserSummary {
   id: number;
   username: string;
   email: string;
+  firstName?: string;
+  lastName?: string;
   roles: string[];
   plan: string;
   tenantId: number | null;
   status?: string;
+}
+
+function statusBadge(status?: string) {
+  switch (status?.toUpperCase()) {
+    case "VERIFIED":  return "bg-emerald-100 text-emerald-700";
+    case "ACTIVE":    return "bg-blue-100 text-blue-700";
+    case "SUSPENDED": return "bg-red-100 text-red-600";
+    case "PENDING":   return "bg-amber-100 text-amber-700";
+    default:          return "bg-neutral-100 text-neutral-500";
+  }
 }
 
 function getToken() { return localStorage.getItem("dsp_admin_token") ?? ""; }
@@ -160,22 +172,42 @@ export function PlatformAdminUsers() {
     }
   }
 
+  async function toggleStatus(u: UserSummary) {
+    const next = u.status?.toUpperCase() === "SUSPENDED" ? "VERIFIED" : "SUSPENDED";
+    try {
+      const res = await fetch(`${AUTH_API}/auth/users/${u.id}/status`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const updated: UserSummary = await res.json();
+      setUsers(prev => prev.map(x => x.id === u.id ? { ...x, status: updated.status } : x));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to update status");
+    }
+  }
+
   useEffect(() => { fetchUsers(); }, []);
 
   const adminEmail = getAdminEmail();
 
   function isAdmin(u: UserSummary) {
-    // Protect by role
     if ((u.roles ?? []).some(r => {
       const lower = r.toLowerCase();
       return lower === "admin" || lower === "role_admin";
     })) return true;
-    // Protect by matching the currently logged-in admin's identity
     if (adminEmail && (
       u.email?.toLowerCase() === adminEmail ||
       u.username?.toLowerCase() === adminEmail
     )) return true;
     return false;
+  }
+
+  function isSelf(u: UserSummary) {
+    return adminEmail
+      ? u.email?.toLowerCase() === adminEmail || u.username?.toLowerCase() === adminEmail
+      : false;
   }
 
   async function saveRoles(u: UserSummary) {
@@ -253,6 +285,10 @@ export function PlatformAdminUsers() {
       u.username?.toLowerCase().includes(search.toLowerCase())
   );
 
+  const activeCount    = users.filter(u => ["VERIFIED","ACTIVE"].includes(u.status?.toUpperCase() ?? "")).length;
+  const suspendedCount = users.filter(u => u.status?.toUpperCase() === "SUSPENDED").length;
+  const pendingCount   = users.filter(u => u.status?.toUpperCase() === "PENDING").length;
+
   return (
     <div>
       {showCreateModal && (
@@ -271,6 +307,26 @@ export function PlatformAdminUsers() {
             <Plus className="w-4 h-4" /> New User
           </button>
         </div>
+      </div>
+
+      {/* Stats bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        {[
+          { label: "Total",     value: users.length,   icon: Users,      color: "text-indigo-600 bg-indigo-50" },
+          { label: "Active",    value: activeCount,    icon: UserCheck,  color: "text-emerald-600 bg-emerald-50" },
+          { label: "Suspended", value: suspendedCount, icon: UserX,      color: "text-red-500 bg-red-50" },
+          { label: "Pending",   value: pendingCount,   icon: Clock,      color: "text-amber-600 bg-amber-50" },
+        ].map(s => (
+          <div key={s.label} className="bg-white border border-neutral-200 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${s.color}`}>
+              <s.icon className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-neutral-900 leading-none">{s.value}</p>
+              <p className="text-xs text-neutral-500 mt-0.5">{s.label}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Search */}
@@ -298,7 +354,7 @@ export function PlatformAdminUsers() {
             <thead>
               <tr className="border-b border-neutral-100 text-neutral-500 text-xs uppercase tracking-wider bg-neutral-50">
                 <th className="text-left px-5 py-3">User</th>
-                <th className="text-left px-5 py-3">Username</th>
+                <th className="text-left px-5 py-3">Status</th>
                 <th className="text-left px-5 py-3">Roles</th>
                 <th className="text-left px-5 py-3">Plan</th>
                 <th className="text-left px-5 py-3">Actions</th>
@@ -307,22 +363,31 @@ export function PlatformAdminUsers() {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="text-center text-neutral-400 py-10">
+                  <td colSpan={5} className="text-center text-neutral-400 py-10">
                     {search ? "No users match your search" : "No users found"}
                   </td>
                 </tr>
               )}
-              {filtered.map((u) => (
+              {filtered.map((u) => {
+                const fullName = [u.firstName, u.lastName].filter(Boolean).join(" ");
+                return (
                 <tr key={u.id} className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-semibold text-indigo-700">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${u.status?.toUpperCase() === "SUSPENDED" ? "bg-red-100 text-red-600" : "bg-indigo-100 text-indigo-700"}`}>
                         {(u.email ?? u.username ?? "?")[0].toUpperCase()}
                       </div>
-                      <span className="text-neutral-800">{u.email ?? "—"}</span>
+                      <div>
+                        <p className="text-neutral-800">{u.email ?? "—"}</p>
+                        {fullName && <p className="text-xs text-neutral-400">{fullName}</p>}
+                      </div>
                     </div>
                   </td>
-                  <td className="px-5 py-3 text-neutral-500">{u.username ?? "—"}</td>
+                  <td className="px-5 py-3">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge(u.status)}`}>
+                      {u.status ?? "—"}
+                    </span>
+                  </td>
                   <td className="px-5 py-3">
                     {editRolesId === u.id ? (
                       <div className="space-y-1">
@@ -450,20 +515,32 @@ export function PlatformAdminUsers() {
                         >
                           <KeyRound className="w-4 h-4" />
                         </button>
-                        {!isAdmin(u) && (
-                          <button
-                            onClick={() => setConfirmDeleteId(u.id)}
-                            className="text-neutral-300 hover:text-red-500 transition-colors"
-                            title="Delete user"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                        {!isAdmin(u) && !isSelf(u) && (
+                          <>
+                            <button
+                              onClick={() => toggleStatus(u)}
+                              className={`transition-colors ${u.status?.toUpperCase() === "SUSPENDED" ? "text-emerald-400 hover:text-emerald-600" : "text-neutral-400 hover:text-amber-500"}`}
+                              title={u.status?.toUpperCase() === "SUSPENDED" ? "Activate user" : "Suspend user"}
+                            >
+                              {u.status?.toUpperCase() === "SUSPENDED"
+                                ? <ShieldCheck className="w-4 h-4" />
+                                : <ShieldOff className="w-4 h-4" />}
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteId(u.id)}
+                              className="text-neutral-300 hover:text-red-500 transition-colors"
+                              title="Delete user"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
                         )}
                       </div>
                     )}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
